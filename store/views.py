@@ -2,18 +2,22 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 
+from django_filters.rest_framework import DjangoFilterBackend
+
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.mixins import CreateModelMixin, RetrieveModelMixin, DestroyModelMixin
 from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.permissions import AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet, GenericViewSet, ModelViewSet, ReadOnlyModelViewSet
+from rest_framework.filters import SearchFilter, OrderingFilter
 
+from .filters import ServiceFilter, OrderFilter
 from .models import Application, Customer, Service, Comment, Cart, CartItem, Order, OrderItem, Discount
-from .serializers import AddCartItemSerializer, ApplicationSerializer, CustomerSerializer, OrderCreateSerializer, OrderForAdminSerializer, ServiceSerializer, CommentSerializer, CartSerializer, CartItemSerializer, OrderSerializer, OrderItemSerializer, DiscountSerializer, UpdateCartItemSerializer
-from .permissions import IsAdminOrReadOnly, IsCommentAuthorOrAdmin
 from .paginations import DefaultPagination
+from .permissions import IsAdminOrReadOnly, IsCommentAuthorOrAdmin
+from .serializers import AddCartItemSerializer, ApplicationSerializer, CustomerSerializer, OrderCreateSerializer, OrderForAdminSerializer, ServiceSerializer, CommentSerializer, CartSerializer, CartItemSerializer, OrderSerializer, OrderItemSerializer, DiscountSerializer, UpdateCartItemSerializer
 
 
 
@@ -37,6 +41,11 @@ class ServiceViewSet(ModelViewSet):
     parser_classes = [MultiPartParser, FormParser]
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = DefaultPagination
+    filter_backends = [SearchFilter, DjangoFilterBackend, OrderingFilter]
+    filterset_class = ServiceFilter
+    search_fields = ["name"]
+    ordering_fields = ["price"]
+    
     
     def get_queryset(self):
         application_pk = self.kwargs["application_pk"]
@@ -103,6 +112,8 @@ class CartItemViewSet(ModelViewSet):
 class OrderViewSet(ModelViewSet):
     http_method_names = ['get', 'post', 'head', 'options']
     pagination_class = DefaultPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = OrderFilter
 
     def get_permissions(self):
         return [IsAuthenticated()]
