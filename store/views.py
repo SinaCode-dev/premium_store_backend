@@ -1,5 +1,6 @@
 from django.core.exceptions import PermissionDenied
 from django.db.models import Prefetch
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 
 from django_filters.rest_framework import DjangoFilterBackend
@@ -14,7 +15,7 @@ from rest_framework.viewsets import ModelViewSet, GenericViewSet, ModelViewSet, 
 from rest_framework.filters import SearchFilter, OrderingFilter
 
 from .filters import ServiceFilter, OrderFilter
-from .models import Application, Customer, Service, Comment, Cart, CartItem, Order, OrderItem, Discount
+from .models import Application, Customer, Service, Comment, Cart, CartItem, Order, OrderItem, Discount, ServiceField
 from .paginations import DefaultPagination
 from .permissions import IsAdminOrReadOnly, IsCommentAuthorOrAdmin
 from .serializers import AddCartItemSerializer, ApplicationSerializer, CustomerSerializer, OrderCreateSerializer, OrderForAdminSerializer, ServiceSerializer, CommentSerializer, CartSerializer, CartItemSerializer, OrderSerializer, OrderItemSerializer, DiscountSerializer, UpdateCartItemSerializer
@@ -23,9 +24,11 @@ from .serializers import AddCartItemSerializer, ApplicationSerializer, CustomerS
 
 class ApplicationViewSet(ModelViewSet):
     serializer_class = ApplicationSerializer
-    queryset = Application.objects.all()
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = DefaultPagination
+
+    def get_queryset(self):
+        return Application.objects.select_related("top_service").all()
 
     def initialize_request(self, request, *args, **kwargs):
         request = super().initialize_request(request, *args, **kwargs)
@@ -49,7 +52,7 @@ class ServiceViewSet(ModelViewSet):
     
     def get_queryset(self):
         application_pk = self.kwargs["application_pk"]
-        return Service.objects.filter(application_id=application_pk).all()
+        return Service.objects.filter(application_id=application_pk).select_related('discounts').prefetch_related('required_fields')
     
     def perform_create(self, serializer):
         application = get_object_or_404(Application, pk=self.kwargs['application_pk'])
@@ -71,7 +74,7 @@ class CommentViewSet(ModelViewSet):
     def get_queryset(self):
         application_pk = self.kwargs["application_pk"]
         service_pk = self.kwargs["service_pk"]
-        return Comment.objects.filter(service_id=service_pk, service__application_id=application_pk).all()
+        return Comment.objects.select_related("author").filter(service_id=service_pk, service__application_id=application_pk).all()
     
     def perform_create(self, serializer):
         service = get_object_or_404(Service, pk=self.kwargs['service_pk'])
@@ -85,8 +88,23 @@ class CommentViewSet(ModelViewSet):
 
 class CartViewSet(CreateModelMixin, RetrieveModelMixin, DestroyModelMixin, GenericViewSet):
     serializer_class = CartSerializer
-    queryset = Cart.objects.prefetch_related('items__service').all()
     permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        return Cart.objects.prefetch_related(
+            Prefetch(
+                'items',
+                queryset=CartItem.objects.select_related('service').prefetch_related(
+                    Prefetch('service__required_fields', queryset=ServiceField.objects.all()),
+                    'service__discounts'
+                )
+            )
+        )
+    
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        instance = self.get_queryset().get(pk=instance.pk)
+        serializer.instance = instance
 
 
 class CartItemViewSet(ModelViewSet):
@@ -95,8 +113,9 @@ class CartItemViewSet(ModelViewSet):
 
     def get_queryset(self):
         cart_pk = self.kwargs["cart_pk"]
-        get_object_or_404(Cart, pk=cart_pk)
-        return CartItem.objects.select_related('service').filter(cart_id=cart_pk).all()
+        return CartItem.objects.select_related('service__discounts').prefetch_related(
+            'service__required_fields'
+        ).filter(cart_id=cart_pk)
 
     def get_serializer_class(self):
         if self.request.method == "POST":
@@ -120,7 +139,10 @@ class OrderViewSet(ModelViewSet):
 
     def get_queryset(self):
         queryset = Order.objects.prefetch_related(
-            Prefetch('items', queryset=OrderItem.objects.select_related('service'))
+            Prefetch(
+                'items',
+                queryset=OrderItem.objects.select_related('service__discounts').prefetch_related('service__required_fields')
+            )
         ).select_related('customer__user')
 
         if self.request.user.is_staff:
@@ -168,7 +190,7 @@ class OrderItemsViewSet(ReadOnlyModelViewSet):
 
     def get_queryset(self):
         order_pk = self.kwargs["order_pk"]
-        return OrderItem.objects.select_related('service').filter(order_id=order_pk)
+        return OrderItem.objects.select_related('service__discounts').prefetch_related('service__required_fields').filter(order_id=order_pk)
 
 
 class DiscountViewSet(ModelViewSet):
@@ -185,7 +207,7 @@ class DiscountServicesViewSet(ModelViewSet):
 
     def get_queryset(self):
         discount_pk = self.kwargs["discount_pk"]
-        return Service.objects.filter(discounts_id=discount_pk).all()
+        return Service.objects.filter(discounts_id=discount_pk).select_related('discounts').prefetch_related('required_fields')
 
 
 class CustomerViewSet(GenericViewSet):
@@ -196,9 +218,9 @@ class CustomerViewSet(GenericViewSet):
 
     def list(self, request):
         if request.user.is_staff:
-            queryset = Customer.objects.all()
+            queryset = Customer.objects.select_related("user").all()
         else:
-            queryset = Customer.objects.filter(user=request.user)
+            queryset = Customer.objects.select_related("user").filter(user=request.user)
         
         page = self.paginate_queryset(queryset)
         if page is not None:
@@ -212,13 +234,13 @@ class CustomerViewSet(GenericViewSet):
         if not request.user.is_staff:
             raise PermissionDenied("Normal users do not have permission to access this address. Use '/custommers/me/'.")
 
-        customer = get_object_or_404(Customer, pk=pk)
+        customer = get_object_or_404(Customer.objects.select_related("user"), pk=pk)
         serializer = self.get_serializer(customer)
         return Response(serializer.data)
 
     @action(detail=False, methods=['GET', 'PATCH', 'PUT'], url_path='me')
     def me(self, request):
-        customer = Customer.objects.get(user=request.user)
+        customer = Customer.objects.select_related("user").get(user=request.user)
 
         if request.method == 'GET':
             serializer = self.get_serializer(customer)
