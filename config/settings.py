@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -140,3 +141,10 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly'
     ]
 }
+
+ZARINPAL_MERCHANT_ID = '00000000-0000-0000-0000-000000000000'
+ZARINPAL_SANDBOX = True
+ZARINPAL_REQUEST_URL = 'https://sandbox.zarinpal.com/pg/v4/payment/request.json'
+ZARINPAL_VERIFY_URL = 'https://sandbox.zarinpal.com/pg/v4/payment/verify.json'
+ZARINPAL_START_PAY_URL = 'https://sandbox.zarinpal.com/pg/StartPay/'
+ZARINPAL_CALLBACK_URL = 'http://127.0.0.1:8000/orders/{order_id}/callback/'

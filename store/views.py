@@ -2,8 +2,12 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import Prefetch
 from django.http import Http404
 from django.shortcuts import get_object_or_404
+from django.conf import settings
+from django.db import transaction
 
 from django_filters.rest_framework import DjangoFilterBackend
+
+import requests
 
 from rest_framework import status
 from rest_framework.decorators import action
@@ -18,7 +22,7 @@ from .filters import ServiceFilter, OrderFilter
 from .models import Application, Customer, Service, Comment, Cart, CartItem, Order, OrderItem, Discount, ServiceField
 from .paginations import DefaultPagination
 from .permissions import IsAdminOrReadOnly, IsCommentAuthorOrAdmin
-from .serializers import AddCartItemSerializer, ApplicationSerializer, CustomerSerializer, OrderCreateSerializer, OrderForAdminSerializer, ServiceSerializer, CommentSerializer, CartSerializer, CartItemSerializer, OrderSerializer, OrderItemSerializer, DiscountSerializer, UpdateCartItemSerializer
+from .serializers import AddCartItemSerializer, ApplicationSerializer, CustomerSerializer, OrderCreateSerializer, OrderForAdminSerializer, ServiceSerializer, CommentSerializer, CartSerializer, CartItemSerializer, OrderSerializer, OrderItemSerializer, DiscountSerializer, UpdateCartItemSerializer, EmptySerializer
 
 
 
@@ -135,6 +139,8 @@ class OrderViewSet(ModelViewSet):
     filterset_class = OrderFilter
 
     def get_permissions(self):
+        if self.action == 'callback':
+            return [AllowAny()]
         return [IsAuthenticated()]
 
     def get_queryset(self):
@@ -150,8 +156,11 @@ class OrderViewSet(ModelViewSet):
         return queryset.filter(customer__user=self.request.user)
 
     def get_serializer_class(self):
-        if self.request.method == "POST":
+        if self.action == 'create':
             return OrderCreateSerializer
+        
+        if self.action == 'pay':
+            return EmptySerializer
         
         if self.request.user.is_staff:
             return OrderForAdminSerializer
@@ -182,6 +191,82 @@ class OrderViewSet(ModelViewSet):
         order = serializer.save()
         order_serializer = OrderSerializer(order)
         return Response(order_serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['post'], url_path='pay')
+    def pay(self, request, pk=None):
+        order = self.get_object()
+        if order.status != Order.ORDER_STATUS_UNPAID:
+            return Response({'error': 'The order has already been paid for or cancelled.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        total_price = sum(item.quantity * item.price for item in order.items.all())
+        amount = int(total_price * 10)
+
+        data = {
+            "merchant_id": settings.ZARINPAL_MERCHANT_ID,
+            "amount": amount,
+            "callback_url": settings.ZARINPAL_CALLBACK_URL.format(order_id=order.id),
+            "description": f"Payment for order number {order.id} - Premium Services Store",
+            "metadata": {"order_id": str(order.id), "customer_email": order.customer.user.email}
+        }
+
+        try:
+            response = requests.post(settings.ZARINPAL_REQUEST_URL, json=data)
+            result = response.json()
+        except Exception as e:
+            return Response({'error': f'Error connecting to ZarinPal{str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        if 'data' in result and result['data'].get('code') == 100:
+            authority = result['data']['authority']
+            order.payment_authority = authority
+            order.save()
+            payment_url = settings.ZARINPAL_START_PAY_URL + authority
+            return Response({'payment_url': payment_url}, status=status.HTTP_200_OK)
+        else:
+            error_msg = result.get('errors', {}).get('message', 'Unspecified error')
+            return Response({'error': error_msg}, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['get'], url_path='callback')
+    def callback(self, request, pk=None):
+        order = get_object_or_404(Order, pk=pk)
+        authority = request.query_params.get('Authority')
+        status_param = request.query_params.get('Status')
+
+        print("Callback: Authority from URL:", authority)
+        print("Stored Authority in order:", order.payment_authority)
+
+        if status_param != 'OK' or order.payment_authority != authority:
+            order.status = Order.ORDER_STATUS_CANCELED
+            order.save()
+            return Response({'error': 'Payment unsuccessful or canceled'}, status=status.HTTP_400_BAD_REQUEST)
+
+        total_price = sum(item.quantity * item.price for item in order.items.all())
+        amount = int(total_price * 10)
+        print("Calculated Amount:", amount)
+
+        data = {
+            "merchant_id": settings.ZARINPAL_MERCHANT_ID,
+            "authority": authority,
+            "amount": amount
+        }
+
+        try:
+            response = requests.post(settings.ZARINPAL_VERIFY_URL, json=data)
+            result = response.json()
+            print("Complete verify response from ZarinPal:", result)
+        except Exception as e:
+            return Response({'error': f'Error in payment confirmation: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        with transaction.atomic():
+            if 'data' in result and result['data'].get('code') in [100, 101]:
+                order.status = Order.ORDER_STATUS_PAID
+                order.payment_ref_id = result['data'].get('ref_id')
+                order.save()
+                return Response({'success': 'Payment successfully confirmed', 'ref_id': order.payment_ref_id}, status=status.HTTP_200_OK)
+            else:
+                error_msg = result.get('errors', {}).get('message', 'Unknown error')
+                order.status = Order.ORDER_STATUS_CANCELED
+                order.save()
+                return Response({'error': error_msg}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class OrderItemsViewSet(ReadOnlyModelViewSet):

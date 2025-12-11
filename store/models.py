@@ -53,7 +53,7 @@ class Service(models.Model):
     image = models.ImageField(upload_to='services/images/', null=True, blank=True, default='services/images/default_service.jpg')
     slug = models.SlugField()
     description = models.TextField()
-    price = models.DecimalField(max_digits=5, decimal_places=2)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
     datetime_created = models.DateTimeField(auto_now_add=True)
     datetime_modified = models.DateTimeField(auto_now=True)
     discounts = models.ForeignKey(Discount, null=True, blank=True, on_delete=models.SET_NULL)
@@ -123,6 +123,8 @@ class Order(models.Model):
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT)
     datetime_created = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=1, choices=ORDER_STATUS, default=ORDER_STATUS_UNPAID)
+    payment_authority = models.CharField(max_length=100, blank=True, null=True)
+    payment_ref_id = models.CharField(max_length=100, blank=True, null=True)
 
 
 class OrderItem(models.Model):

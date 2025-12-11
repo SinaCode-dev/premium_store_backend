@@ -1,11 +1,7 @@
 from django.conf import settings
 from django.db import transaction
-from django.utils.safestring import mark_safe
 
 from rest_framework import serializers
-from rest_framework.serializers import SlugRelatedField
-
-import re
 
 from .models import Application, Customer, Service, Comment, Cart, CartItem, Order, OrderItem, Discount, ServiceField
 
@@ -230,11 +226,13 @@ class OrderItemSerializer(serializers.ModelSerializer):
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     total_order_price = serializers.SerializerMethodField()
+    payment_authority = serializers.CharField(read_only=True)
+    payment_ref_id = serializers.CharField(read_only=True)
 
     class Meta:
         model = Order
-        fields = ["id", "customer", "datetime_created", "status", "items", "total_order_price"]
-        read_only_fields = ["id", "datetime_created", "customer", "items", "total_order_price", "status"]
+        fields = ["id", "customer", "datetime_created", "status", "items", "total_order_price", "payment_authority", "payment_ref_id"]
+        read_only_fields = ["id", "datetime_created", "customer", "items", "total_order_price", "payment_authority", "payment_ref_id", "status"]
 
     def get_total_order_price(self, obj):
         return sum(item.quantity * item.price for item in obj.items.all())
@@ -243,10 +241,12 @@ class OrderSerializer(serializers.ModelSerializer):
 class OrderForAdminSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True)
     customer = serializers.StringRelatedField()
+    payment_authority = serializers.CharField(read_only=True)
+    payment_ref_id = serializers.CharField(read_only=True)
 
     class Meta:
         model = Order
-        fields = ["id", "customer", "datetime_created", "status", "items"]
+        fields = ["id", "customer", "datetime_created", "status", "items", "payment_authority", "payment_ref_id"]
 
 
 class OrderCreateSerializer(serializers.Serializer):
@@ -332,3 +332,7 @@ class CustomerSerializer(serializers.ModelSerializer):
         model = Customer
         fields = ['id', 'username', 'email', 'phone_number']
         read_only_fields = ['id', 'username', 'email']
+
+
+class EmptySerializer(serializers.Serializer):
+    pass
