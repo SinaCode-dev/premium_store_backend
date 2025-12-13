@@ -27,6 +27,7 @@ from .models import Application, Customer, Service, Comment, Cart, CartItem, Ord
 from .paginations import DefaultPagination
 from .permissions import IsAdminOrReadOnly, IsCommentAuthorOrAdmin
 from .serializers import AddCartItemSerializer, ApplicationSerializer, CustomerSerializer, OrderCreateSerializer, OrderForAdminSerializer, ServiceSerializer, CommentSerializer, CartSerializer, CartItemSerializer, OrderSerializer, OrderItemSerializer, DiscountSerializer, UpdateCartItemSerializer, EmptySerializer, VerifySerializer
+from .tasks import send_sms_task
 
 
 
@@ -364,7 +365,7 @@ class CustomerViewSet(GenericViewSet):
             code = str(random.randint(100000, 999999))
             cache.set(f'pending_phone_{request.user.id}', str(new_phone), 300)
             cache.set(f'phone_verify_{request.user.id}', code, 300)
-            send_sms(new_phone, f'Your verification code is: {code}')
+            send_sms_task.delay(new_phone, f'Your verification code is: {code}')
             serializer.validated_data.pop('phone_number', None)
             serializer.save()
             
