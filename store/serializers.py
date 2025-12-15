@@ -33,7 +33,10 @@ class ApplicationSerializer(serializers.ModelSerializer):
     
     def get_image_url(self, obj):
         request = self.context.get('request')
-        path = obj.image.url if obj.image and hasattr(obj.image, 'url') else settings.MEDIA_URL + 'applications/images/default_application.jpg'
+        if obj.image and hasattr(obj.image, 'url'):
+            path = obj.image.url
+        else:
+            path = settings.STATIC_URL + 'store/images/default_application.jpg'
         if request is not None:
             return request.build_absolute_uri(path)
         else:
@@ -72,7 +75,10 @@ class ServiceSerializer(serializers.ModelSerializer):
     
     def get_image_url(self, obj):
         request = self.context.get('request')
-        path = obj.image.url if obj.image and hasattr(obj.image, 'url') else settings.MEDIA_URL + 'services/images/default_service.jpg'
+        if obj.image and hasattr(obj.image, 'url'):
+            path = obj.image.url
+        else:
+            path = settings.STATIC_URL + 'store/images/default_service.jpg'
         if request is not None:
             return request.build_absolute_uri(path)
         else:

@@ -31,7 +31,7 @@ class Application(models.Model):
     title = models.CharField(max_length=250)
     description = models.TextField()
     top_service = models.ForeignKey('Service', null=True, blank=True, on_delete=models.SET_NULL, related_name='applications')
-    image = models.ImageField(upload_to='applications/images/', null=True, blank=True, default='applications/images/default_application.jpg')
+    image = models.ImageField(upload_to='applications/images/', null=True, blank=True)
 
     def __str__(self):
         return self.title
@@ -52,7 +52,7 @@ class Discount(models.Model):
 class Service(models.Model):
     name = models.CharField(max_length=250)
     application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name='services')
-    image = models.ImageField(upload_to='services/images/', null=True, blank=True, default='services/images/default_service.jpg')
+    image = models.ImageField(upload_to='services/images/', null=True, blank=True)
     slug = models.SlugField()
     description = models.TextField()
     price = models.DecimalField(max_digits=10, decimal_places=0)
