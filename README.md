@@ -140,25 +140,45 @@ For full API documentation, use tools like Swagger (not included, but can be add
 ## Project Structure
 .
 ├── store/                # Main app: models, views, serializers, etc.
+
 │   ├── migrations/       # Database migrations
+
 │   ├── static/           # Static files (e.g., default images)
+
 │   ├── admin.py          # Django admin config
+
 │   ├── models.py         # Database models
+
 │   ├── serializers.py    # DRF serializers
+
 │   ├── views.py          # API views
+
 │   ├── urls.py           # API routes
+
 │   └── ...
+
 ├── core/                 # Custom user model app
+
 ├── config/               # Project settings
+
 │   ├── settings.py       # Django settings
+
 │   ├── urls.py           # Root URLs
+
 │   └── ...
+
 ├── media/                # Uploaded media (e.g., images)
+
 ├── docker-compose.yml    # Docker setup
+
 ├── Dockerfile            # Backend container config
+
 ├── requirements.txt      # Dependencies
+
 ├── .env                  # Environment variables (not committed)
+
 ├── .dockerignore         # Docker ignore rules
+
 └── .gitignore            # Git ignore rules
 
 
