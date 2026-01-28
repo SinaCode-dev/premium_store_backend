@@ -4,6 +4,16 @@ This is a Django Rest Framework (DRF) based e-commerce API for selling premium s
 
 This repository serves as a strong portfolio piece demonstrating full-stack API development, including secure authentication, payment integration, and scalable architecture.
 
+## Developers
+**Backend Developer:**
+[Sina Khalafi](https://github.com/SinaCode-dev)
+
+**Frontend Developer:**
+[Arshia Karimi Jabali](https://github.com/ArshiaDev-frontEnd)
+
+---
+Built with ❤️ by backend and frontend team
+
 ## Table of Contents
 - [Features](#features)
 - [Tech Stack](#tech-stack)
